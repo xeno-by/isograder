@@ -1,0 +1,17 @@
+#!/usr/bin/env python
+# coding=utf-8
+import os, sys, logging, inspect
+
+logFormatter = logging.Formatter("%(asctime)-15s [%(levelname)s] %(message)s")
+rootLogger = logging.getLogger()
+rootLogger.setLevel(logging.INFO)
+logRoot = os.path.dirname(os.path.realpath(inspect.getfile(inspect.currentframe())))
+fileHandler = logging.FileHandler("{0}/isograder.log".format(logRoot))
+fileHandler.setFormatter(logFormatter)
+rootLogger.addHandler(fileHandler)
+consoleHandler = logging.StreamHandler()
+consoleHandler.setFormatter(logFormatter)
+rootLogger.addHandler(consoleHandler)
+logger = logging.getLogger("isocollect")
+logger.info("Isograder starting up...")
+logger.info("Isograder shutting down...")
