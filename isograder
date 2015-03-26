@@ -155,7 +155,7 @@ class Section(Part):
         rest = line[level:]
         m = re.match("^\w*(.*?)\w*\[/(\d+)\]$", rest)
         if m:
-          name = m.groups()[0]
+          name = m.groups()[0].strip()
           max_grade = int(m.groups()[1])
           lines = lines[1:]
           parts = []
