@@ -1,0 +1,11 @@
+EXIT CODE:
+1
+
+STDOUT:
+
+STDERR:
+error parsing the correction sheet:
+line 1: at the top level of a correction sheet, only blank lines and section lines are allowed
+Hello:
+^
+

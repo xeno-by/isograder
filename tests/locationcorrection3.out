@@ -1,0 +1,11 @@
+EXIT CODE:
+0
+
+STDOUT:
+* Section [0/1]
+** Subsection [0/1]
+-1: MISTAKE!
+** Subsection [0/0]
+
+STDERR:
+

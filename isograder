@@ -15,7 +15,7 @@ def message_bad_parse(error):
 def message_unexpected_eof(what):
   return "unexpected end of file when parsing " + what
 def message_only_blanks_and_sections_at_top_level():
-  return "at the top-level of a correction sheet, only blank lines and section lines are allowed"
+  return "at the top level of a correction sheet, only blank lines and section lines are allowed"
 def message_no_sections_at_top_level():
   return "a top-level section is required in a correction sheet"
 def message_multiple_sections_at_top_level():
@@ -30,10 +30,10 @@ def message_invalid_line():
   first_line = "invalid line: should either start with * (section) or start with -/+ (correction) or end with - (header)"
   second_line = "NOTE: by the way, multi-line explanations for corrections are not supported"
   return first_line + "\n" + second_line
-def message_invalid_correction_location():
-  return "corrections are only allowed in sections that don't contain any other sections"
 def message_invalid_correction(actual):
   return "invalid correction format: expected \"[-|+]<number>: <explanation>\""
+def message_invalid_leaf():
+  return "headers and corrections are only allowed in sections that don't contain any other sections"
 
 logFormatter = logging.Formatter("%(message)s")
 rootLogger = logging.getLogger()
@@ -233,12 +233,12 @@ class Section(Part):
                   return result
                 elif isinstance(result, Success):
                   part = result.tree
-                  if isinstance(part, Correction) and filter(lambda part: isinstance(part, Section), parts):
+                  if isinstance(part, Leaf) and filter(lambda part: isinstance(part, Section), parts):
                     culprit = part
-                    return Error(culprit.ctx, message_invalid_correction_location())
-                  elif isinstance(part, Section) and filter(lambda part: isinstance(part, Correction), parts):
-                    culprit = filter(lambda part: isinstance(part, Correction), parts)[0]
-                    return Error(culprit.ctx, message_invalid_correction_location())
+                    return Error(culprit.ctx, message_invalid_leaf())
+                  elif isinstance(part, Section) and filter(lambda part: isinstance(part, Leaf), parts):
+                    culprit = filter(lambda part: isinstance(part, Leaf), parts)[0]
+                    return Error(culprit.ctx, message_invalid_leaf())
                   else:
                     parts.append(part)
                     ctx = result.ctx.prev_level()
@@ -259,23 +259,25 @@ class Section(Part):
         return Error(ctx, message_invalid_section_level("*" * expected_level, actual_level))
     else:
       return Error(ctx, message_unexpected_eof("Section"))
-class Header(Part):
+class Leaf(Part):
+  pass
+class Header(Leaf):
   def __init__(self, ctx, str):
     self.ctx = ctx
     self.str = str
   def __str__(self):
-    return str(self.str)
+    return str(self.str) + ":"
   def fill(self):
     return self
   @parser("Header")
   def parse(ctx):
     if ctx.lines:
       line = ctx.lines[0].strip()
-      if line.endswith(":"): return Success(ctx.next_line(), Header(ctx, line[:-1]))
+      if line.endswith(":"): return Success(ctx.next_line(), Header(ctx, line[:-1].strip()))
       else: return Error(ctx, message_invalid_line())
     else:
       return Error(ctx, message_unexpected_eof("Header"))
-class Correction(Part):
+class Correction(Leaf):
   def __init__(self, ctx, penalty, explanation):
     self.ctx = ctx
     self.penalty = penalty
