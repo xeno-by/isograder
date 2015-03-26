@@ -8,8 +8,9 @@ def message_bad_python_version(actual):
   return "need python 2.7, you have " + str(actual)
 def message_bad_command_line(explanation):
   return str(explanation) + "\n" + "usage: " + sys.argv[0] + " [-v]"
-def message_bad_parse(explanation, line_number, line):
-  return "error parsing the correction sheet:" + "\n" + "line " + str(line_number) + ": " + explanation + "\n" + line + "\n" + "^"
+def message_bad_parse(error):
+  line = error.ctx.initial_lines[error.ctx.position - 1] if error.ctx.position - 1 < len(error.ctx.initial_lines) else ""
+  return "error parsing the correction sheet:" + "\n" + str(error) + "\n" + str(line) + "\n" + "^"
 def message_unexpected_eof(what):
   return "unexpected end of file when parsing " + what
 def message_only_blanks_and_sections_at_top_level():
@@ -24,8 +25,10 @@ def message_invalid_section_header(level, actual):
   return "invalid section header: expected " + ("*" * level) + " <name> [/<max_grade>], actual " + actual
 def message_invalid_line():
   return "invalid line: should either start with */-/+ or end with -"
-def message_invalid_grade_header(actual):
-  return "invalid grade header: expected [-|+]<number>: <explanation>, actual " + actual
+def message_invalid_correction_location():
+  return "corrections are only allowed in sections that don't contain any other sections"
+def message_invalid_correction_header(actual):
+  return "invalid correction header: expected [-|+]<number>: <explanation>, actual " + actual
 
 logFormatter = logging.Formatter("%(asctime)-15s [%(levelname)s] %(message)s")
 rootLogger = logging.getLogger()
@@ -57,96 +60,134 @@ verbose = "-v" in flags
 if verbose: rootLogger.setLevel(logging.INFO)
 logger.info("Isograder starting up...")
 
-# this is an amazing level of verbosity in comparison with Scala
+# parsing infrastructure:
+#  1) context that stores positions, remaining lines, etc
+#  2) parse result ADT that contains status of a parse operation + an updated context
 class Context(object):
-  def __init__(self, level):
+  def __init__(self, initial_lines, lines, position, level):
+    self.initial_lines = initial_lines
+    self.lines = lines
+    self.position = position
     self.level = level
   def __str__(self):
-    return "{ level = " + str(self.level) + " }"
-class Error(object):
-  def __init__(self, message):
-    self.message = message
+    return "{ position = " + str(self.position) + ", level = " + str(self.level) + " }"
+  def next_line(self):
+    return Context(self.initial_lines, self.lines[1:], self.position + 1, self.level)
+  def next_level(self):
+    return Context(self.initial_lines, self.lines, self.position, self.level + 1)
+class Success(object):
+  def __init__(self, ctx, tree):
+    self.ctx = ctx
+    self.tree = tree
   def __str__(self):
-    return "Error(" + str(self.message) + ")"
+    return "success at line " + str(self.ctx.position) + ": " + str(self.msg) + " with \n" + str(self.tree)
+class Error(object):
+  def __init__(self, ctx, msg):
+    self.ctx = ctx
+    self.msg = msg
+  def __str__(self):
+    return "error at line " + str(self.ctx.position) + ": " + str(self.msg)
+
+# abstracts over the particulars of the parsing logic allowing to encapsulate cross-cutting concerns
 def parser(target):
   def decorator(meth):
-    def wrapped(ctx, lines):
-      details = "with " + str(ctx) + " at " + (lines[0] if lines else "[]")
+    def wrapped(ctx):
+      details = "with " + str(ctx) + " at " + (ctx.lines[0] if ctx.lines else "[]")
       logger.info("started parsing " + target + " " + details)
-      try: return meth(ctx, lines)
+      try: return meth(ctx)
       finally: logger.info("finished parsing " + target + " " + details)
     return staticmethod(wrapped)
   return decorator
+
+# correction sheet AST
+# NOTE: currently we lose formatting details that are insignificant to semantics
+# NOTE: this has an upside of ensuring canonical formatting, but also has a downside of complicating the diffs
 class Sheet(object):
-  def __init__(self, parts):
+  def __init__(self, ctx, parts):
+    self.ctx = ctx
     self.parts = parts
   def __str__(self):
     return "\n".join(map(lambda part: str(part), self.parts))
+  def compute(self):
+    return Sheet(self.ctx, map(lambda part: part.compute(), self.parts))
   @parser("Sheet")
-  def parse(ctx, lines):
-    assert ctx.level == 0
+  def parse(ctx):
+    assert ctx.position == 1 and ctx.level == 0
+    initial_ctx = ctx
     parts = []
     while True:
-      if lines:
-        result, remaining_lines = Part.parse(ctx, lines)
+      if ctx.lines:
+        result = Part.parse(ctx)
         if isinstance(result, Error):
-          return (result, remaining_lines)
-        elif isinstance(result, Blank):
-          parts.append(result)
-          lines = remaining_lines
-          continue
-        elif isinstance(result, Section):
-          if len(filter(lambda part: isinstance(part, Section), parts)) != 0:
-            return (Error(message_multiple_sections_at_top_level()), lines)
-          else:
-            parts.append(result)
-            lines = remaining_lines
+          return result
+        elif isinstance(result, Success):
+          part = result.tree
+          if isinstance(part, Blank):
+            parts.append(part)
+            ctx = result.ctx
             continue
+          elif isinstance(part, Section):
+            if len(filter(lambda part: isinstance(part, Section), parts)) != 0:
+              return Error(ctx, message_multiple_sections_at_top_level())
+            else:
+              parts.append(part)
+              ctx = result.ctx
+              continue
+          else:
+            return Error(ctx, message_only_blanks_and_sections_at_top_level())
         else:
-          return (Error(message_only_blanks_and_sections_at_top_level()), lines)
+          assert False, "unexpected parse result of type " + str(type(result))
       else:
         break
-    if len(filter(lambda part: isinstance(part, Section), parts)) != 0: return (Sheet(parts), lines)
-    else: return (Error(message_no_sections_at_top_level()), lines)
+    if len(filter(lambda part: isinstance(part, Section), parts)) != 0: return Success(initial_ctx, Sheet(pos, parts))
+    else: return Error(ctx, message_no_sections_at_top_level())
 class Part(object):
   @parser("Part")
-  def parse(ctx, lines):
-    if lines:
-      line = lines[0].strip()
-      if line == "": return Blank.parse(ctx, lines)
-      elif line.startswith("*"): return Section.parse(ctx, lines)
-      elif line.startswith("-") or line.startswith("+"): return Grade.parse(ctx, lines)
-      else: return Header.parse(ctx, lines)
+  def parse(ctx):
+    if ctx.lines:
+      line = ctx.lines[0].strip()
+      if line == "": return Blank.parse(ctx)
+      elif line.startswith("*"): return Section.parse(ctx)
+      elif line.startswith("-") or line.startswith("+"): return Correction.parse(ctx)
+      else: return Header.parse(ctx)
     else:
-      return (Error(message_unexpected_eof("Part")), lines)
+      return Error(ctx, message_unexpected_eof("Part"))
 class Blank(Part):
-  def __init__(self, str):
+  def __init__(self, ctx, str):
+    self.ctx = ctx
     self.str = str
   def __str__(self):
     return str(self.str)
+  def compute(self):
+    return self
   @parser("Blank")
-  def parse(ctx, lines):
-    if lines:
-      line = lines[0].strip()
+  def parse(ctx):
+    if ctx.lines:
+      line = ctx.lines[0].strip()
       assert line == ""
-      return (Blank(line), lines[1:])
+      return Success(ctx.next_line(), Blank(ctx, line))
     else:
-      return (Error(message_unexpected_eof("Blank")), lines)
+      return Error(ctx, message_unexpected_eof("Blank"))
 class Section(Part):
-  def __init__(self, level, name, max_grade, parts):
+  def __init__(self, ctx, level, name, grade, max_grade, parts):
+    self.ctx = ctx
     self.level = level
     self.name = name
-    self.grade = None
+    self.grade = grade
     self.max_grade = max_grade
     self.parts = parts
   def __str__(self):
     header = "*" * self.level +  " " + str(self.name) + " [/" + str(self.max_grade) + "]"
     body = "\n" + "\n".join(map(lambda part: str(part), self.parts)) if self.parts else ""
     return header + body
+  def compute(self):
+    grade = None # TODO: to be implemented
+    return Section(self.ctx, self.level, self.name, grade, self.max_grade, map(lambda part: part.compute(), self.parts))
   @parser("Section")
-  def parse(ctx, lines):
-    if lines:
-      line = lines[0].strip()
+  def parse(ctx):
+    initial_ctx = ctx
+    if ctx.lines:
+      line = ctx.lines[0].strip()
       assert line.startswith("*")
       expected_level = ctx.level + 1
       actual_level = len(re.match("^(\*+).*$", line).groups()[0])
@@ -157,77 +198,90 @@ class Section(Part):
         if m:
           name = m.groups()[0].strip()
           max_grade = int(m.groups()[1])
-          lines = lines[1:]
+          ctx = ctx.next_line()
           parts = []
           while True:
-            if lines:
-              line = lines[0]
+            if ctx.lines:
+              line = ctx.lines[0]
               # need to allow `* Section\n** Subsection`, but stop at `* Section 1\n* Section 2`
               if line.startswith("*") and not line.startswith("*" * (ctx.level + 2)):
                 break
               else:
-                result, remaining_lines = Part.parse(Context(ctx.level + 1), lines)
+                result = Part.parse(ctx.next_level())
                 if isinstance(result, Error):
-                  return (result, remaining_lines)
+                  return result
+                elif isinstance(result, Success):
+                  part = result.tree
+                  if isinstance(part, Correction) and filter(lambda part: isinstance(part, Section), parts):
+                    culprit = part
+                    return Error(culprit.ctx, message_invalid_correction_location())
+                  elif isinstance(part, Section) and filter(lambda part: isinstance(part, Correction), parts):
+                    culprit = filter(lambda part: isinstance(part, Correction), parts)[0]
+                    return Error(culprit.ctx, message_invalid_correction_location())
+                  else:
+                    parts.append(part)
+                    ctx = result.ctx
+                    continue
                 else:
-                  parts.append(result)
-                  lines = remaining_lines
-                  continue
+                  assert False, "unexpected parse result of type " + str(type(result))
             else:
               break
-          return (Section(level, name, max_grade, parts), lines)
+          return Success(ctx, Section(initial_ctx, level, name, None, max_grade, parts))
         else:
-          return (Error(message_invalid_section_header(level, line)), lines)
+          return Error(ctx, message_invalid_section_header(level, line))
       else:
-        return (Error(message_invalid_section_level("*" * expected_level, actual_level)), lines)
+        return Error(ctx, message_invalid_section_level("*" * expected_level, actual_level))
     else:
-      return (Error(message_unexpected_eof("Section")), lines)
+      return Error(ctx, message_unexpected_eof("Section"))
 class Header(Part):
-  def __init__(self, str):
+  def __init__(self, ctx, str):
+    self.ctx = ctx
     self.str = str
   def __str__(self):
     return str(self.str)
+  def compute(self):
+    return self
   @parser("Header")
-  def parse(ctx, lines):
-    if lines:
-      line = lines[0].strip()
-      if line.endswith(":"):
-        return (Header(line[:-1]), lines[1:])
-      else:
-        return (Error(message_invalid_line()), lines)
+  def parse(ctx):
+    if ctx.lines:
+      line = ctx.lines[0].strip()
+      if line.endswith(":"): return Success(ctx.next_line(), Header(ctx, line[:-1]))
+      else: return Error(ctx, message_invalid_line())
     else:
-      return (Error(message_unexpected_eof("Header")), lines)
-class Grade(Part):
-  def __init__(self, grade, explanation):
+      return Error(ctx, message_unexpected_eof("Header"))
+class Correction(Part):
+  def __init__(self, ctx, grade, explanation):
+    self.ctx = ctx
     self.grade = grade
     self.explanation = explanation
   def __str__(self):
     return str(self.grade) + ": " + str(self.explanation)
-  @parser("Grade")
-  def parse(ctx, lines):
-    if lines:
-      line = lines[0].strip()
+  def compute(self):
+    return self
+  @parser("Correction")
+  def parse(ctx):
+    if ctx.lines:
+      line = ctx.lines[0].strip()
       assert line.startswith("-") or line.startswith("+")
       m = re.match("^([-|+]\d+)\w*:\w*(.*?)$", line)
       if m:
         grade = int(m.groups()[0])
         explanation = m.groups()[1]
-        return (Grade(grade, explanation), lines[1:])
+        return Success(ctx.next_line(), Correction(ctx, grade, explanation))
       else:
-        return (Error(message_invalid_grade_header()), lines)
+        return Error(ctx, message_invalid_correction_header())
     else:
-      return (Error(message_unexpected_eof("Grade")), lines)
+      return Error(ctx, message_unexpected_eof("Correction"))
 
 input_string = sys.stdin.read()
 input_lines = input_string.strip().split("\n")
-result, remaining_lines = Sheet.parse(Context(0), input_lines)
-if type(result) == Sheet:
-  input_sheet = result
-  assert len(remaining_lines) == 0
+initial_ctx = Context(input_lines, input_lines, position = 1, level = 0)
+result = Sheet.parse(initial_ctx)
+if type(result) == Success:
+  input_sheet = result.tree
+  assert len(result.ctx.lines) == 0
 elif type(result) == Error:
-  line_number = len(input_lines) - len(remaining_lines) + 1
-  line = remaining_lines[0] if remaining_lines else ""
-  logger.critical(message_bad_parse(result.message, line_number, line))
+  logger.critical(message_bad_parse(result))
   logger.info("Isograder terminating with a parse error...")
   exit(1)
 
