@@ -4,7 +4,7 @@ import os, sys, logging, inspect
 
 logFormatter = logging.Formatter("%(asctime)-15s [%(levelname)s] %(message)s")
 rootLogger = logging.getLogger()
-rootLogger.setLevel(logging.INFO)
+rootLogger.setLevel(logging.CRITICAL)
 logRoot = os.path.dirname(os.path.realpath(inspect.getfile(inspect.currentframe())))
 fileHandler = logging.FileHandler("{0}/isograder.log".format(logRoot))
 fileHandler.setFormatter(logFormatter)
@@ -13,5 +13,17 @@ consoleHandler = logging.StreamHandler()
 consoleHandler.setFormatter(logFormatter)
 rootLogger.addHandler(consoleHandler)
 logger = logging.getLogger("isocollect")
+
+def fail_bad_python_version(): logger.critical("need python 2.7, you have " + str(sys.version_info)); exit(1)
+if sys.version_info < (2, 7) or (2, 8) <= sys.version_info: fail_bad_python_version()
+
+def fail_bad_command_line(reason): logger.critical(reason); logger.critical("usage: " + sys.argv[0] + " [-v]"); exit(1)
+flags = filter(lambda arg: arg.startswith("-"), sys.argv[1:])
+other = filter(lambda arg: not arg.startswith("-"), sys.argv[1:])
+for flag in filter(lambda flag: flag != "-v", flags): fail_bad_command_line("unrecognized flag: " + flag)
+for other in other: fail_bad_command_line("unrecognized argument: " + other)
+verbose = "-v" in flags
+if verbose: rootLogger.setLevel(logging.INFO)
+
 logger.info("Isograder starting up...")
 logger.info("Isograder shutting down...")
