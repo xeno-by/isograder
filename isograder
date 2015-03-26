@@ -9,16 +9,17 @@ def message_bad_python_version(actual):
 def message_bad_command_line(explanation):
   return str(explanation) + "\n" + "usage: " + sys.argv[0] + " [-v]"
 def message_bad_parse(error):
-  line = error.ctx.initial_lines[error.ctx.position - 1] if error.ctx.position - 1 < len(error.ctx.initial_lines) else ""
-  return "error parsing the correction sheet:" + "\n" + str(error) + "\n" + str(line) + "\n" + "^"
+  is_useful_position = error.ctx.position - 1 < len(error.ctx.initial_lines)
+  if is_useful_position: return "error parsing the correction sheet:" + "\n" + str(error) + "\n" + str(line) + "\n" + "^"
+  else: return "error parsing the correction sheet:" + "\n" + str(error.msg)
 def message_unexpected_eof(what):
   return "unexpected end of file when parsing " + what
 def message_only_blanks_and_sections_at_top_level():
   return "at the top-level of a correction sheet, only blank lines and section lines are allowed"
 def message_no_sections_at_top_level():
-  return "exactly one section is allowed at the top level of a correction sheet"
+  return "a top-level section is required in a correction sheet"
 def message_multiple_sections_at_top_level():
-  return "exactly one section is allowed at the top level of a correction sheet"
+  return "only one top-level section is allowed in a correction sheet"
 def message_invalid_section_level(level, actual):
   return "invalid section level: expected " + level + ", actual " + ("*" * actual)
 def message_invalid_section_header(level, actual):
@@ -32,7 +33,7 @@ def message_invalid_correction_location():
 def message_invalid_correction_header(actual):
   return "invalid correction header: expected [-|+]<number>: <explanation>, actual " + actual
 
-logFormatter = logging.Formatter("%(asctime)-15s [%(levelname)s] %(message)s")
+logFormatter = logging.Formatter("%(message)s")
 rootLogger = logging.getLogger()
 rootLogger.setLevel(logging.CRITICAL)
 logRoot = os.path.dirname(os.path.realpath(inspect.getfile(inspect.currentframe())))
@@ -59,6 +60,7 @@ other = filter(lambda arg: not arg.startswith("-"), sys.argv[1:])
 for flag in filter(lambda flag: flag != "-v", flags): fail_bad_command_line("unrecognized flag: " + flag)
 for other in other: fail_bad_command_line("unrecognized argument: " + other)
 verbose = "-v" in flags
+if verbose: logFormatter = logging.Formatter("%(asctime)-15s [%(levelname)s] %(message)s")
 if verbose: rootLogger.setLevel(logging.INFO)
 logger.info("Isograder starting up...")
 
@@ -84,13 +86,13 @@ class Success(object):
     self.ctx = ctx
     self.tree = tree
   def __str__(self):
-    return "success at line " + str(self.ctx.position) + ": " + str(self.msg) + " with \n" + str(self.tree)
+    return "line " + str(self.ctx.position) + ": " + str(self.msg) + " with \n" + str(self.tree)
 class Error(object):
   def __init__(self, ctx, msg):
     self.ctx = ctx
     self.msg = msg
   def __str__(self):
-    return "error at line " + str(self.ctx.position) + ": " + str(self.msg)
+    return "line " + str(self.ctx.position) + ": " + str(self.msg)
 
 # abstracts over the particulars of the parsing logic allowing to encapsulate cross-cutting concerns
 def parser(target):
