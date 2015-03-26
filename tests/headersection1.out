@@ -1,0 +1,11 @@
+EXIT CODE:
+1
+
+STDOUT:
+
+STDERR:
+error parsing the correction sheet:
+line 1: invalid section header format: expected "* <name> [/<max_grade>]"
+* Section
+^
+

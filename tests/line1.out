@@ -1,0 +1,12 @@
+EXIT CODE:
+1
+
+STDOUT:
+
+STDERR:
+error parsing the correction sheet:
+line 4: invalid line: should either start with * (section) or start with -/+ (correction) or end with - (header)
+NOTE: by the way, multi-line explanations for corrections are not supported
+that deserves a multi-line explanation.
+^
+

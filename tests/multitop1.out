@@ -1,0 +1,11 @@
+EXIT CODE:
+1
+
+STDOUT:
+
+STDERR:
+error parsing the correction sheet:
+line 2: only one top-level section is allowed in a correction sheet
+* Etape 2 [/20]
+^
+

@@ -1,0 +1,11 @@
+EXIT CODE:
+1
+
+STDOUT:
+
+STDERR:
+error parsing the correction sheet:
+line 2: invalid correction format: expected "[-|+]<number>: <explanation>"
+-1 MISTAKE!
+^
+
