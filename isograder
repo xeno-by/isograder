@@ -68,31 +68,40 @@ class Error(object):
     self.message = message
   def __str__(self):
     return "Error(" + str(self.message) + ")"
+def parser(target):
+  def decorator(meth):
+    def wrapped(ctx, lines):
+      details = "with " + str(ctx) + " at " + (lines[0] if lines else "[]")
+      logger.info("started parsing " + target + " " + details)
+      try: return meth(ctx, lines)
+      finally: logger.info("finished parsing " + target + " " + details)
+    return staticmethod(wrapped)
+  return decorator
 class Sheet(object):
   def __init__(self, parts):
     self.parts = parts
   def __str__(self):
     return "\n".join(map(lambda part: str(part), parts))
-  @staticmethod
+  @parser("Sheet")
   def parse(ctx, lines):
-    logger.info("parsing Sheet in " + str(ctx) + " at " + (lines[0] if lines else "[]"))
     assert ctx.level == 0
     parts = []
     while True:
       if lines:
         result, remaining_lines = Part.parse(ctx, lines)
-        def move_on():
-          parts.append(result)
-          lines = remaining_lines
         if isinstance(result, Error):
           return (result, remaining_lines)
         elif isinstance(result, Blank):
-          move_on()
+          parts.append(result)
+          lines = remaining_lines
+          continue
         elif isinstance(result, Section):
           if len(filter(lambda part: isinstance(part, Section), parts)) != 0:
             return (Error(message_multiple_sections_at_top_level()), lines)
           else:
-            move_on()
+            parts.append(result)
+            lines = remaining_lines
+            continue
         else:
           return (Error(message_only_blanks_and_sections_at_top_level()), lines)
       else:
@@ -100,9 +109,8 @@ class Sheet(object):
     if len(filter(lambda part: isinstance(part, Section), parts)) != 0: return (Sheet(parts), lines)
     else: return (Error(message_no_sections_at_top_level()), lines)
 class Part(object):
-  @staticmethod
+  @parser("Part")
   def parse(ctx, lines):
-    logger.info("parsing Part in " + str(ctx) + " at " + (lines[0] if lines else "[]"))
     if lines:
       line = lines[0].strip()
       if line == "": return Blank.parse(ctx, lines)
@@ -116,9 +124,8 @@ class Blank(Part):
     self.str = str
   def __str__(self):
     return str(self.str)
-  @staticmethod
+  @parser("Blank")
   def parse(ctx, lines):
-    logger.info("parsing Blank in " + str(ctx) + " at " + (lines[0] if lines else "[]"))
     if lines:
       line = lines[0].strip()
       assert line == ""
@@ -133,10 +140,11 @@ class Section(Part):
     self.max_grade = max_grade
     self.parts = parts
   def __str__(self):
-    return "*" * self.level +  " " + str(self.name) + " [/" + str(self.max_grade) + "]"
-  @staticmethod
+    header = "*" * self.level +  " " + str(self.name) + " [/" + str(self.max_grade) + "]"
+    body = "\n" + "\n".join(map(lambda part: str(part), self.parts)) if self.parts else ""
+    return header + body
+  @parser("Section")
   def parse(ctx, lines):
-    logger.info("parsing Section in " + str(ctx) + " at " + (lines[0] if lines else "[]"))
     if lines:
       line = lines[0].strip()
       assert line.startswith("*")
@@ -157,12 +165,13 @@ class Section(Part):
               if line.startswith("*"):
                 break
               else:
-                result, remaining_lines = Part.parse(Context(ctx.level + 1), lines[1:])
+                result, remaining_lines = Part.parse(Context(ctx.level + 1), lines)
                 if isinstance(result, Error):
                   return (result, remaining_lines)
                 else:
                   parts.append(result)
                   lines = remaining_lines
+                  continue
             else:
               break
           return (Section(level, name, max_grade, parts), lines)
@@ -177,9 +186,8 @@ class Header(Part):
     self.str = str
   def __str__(self):
     return str(self.str)
-  @staticmethod
+  @parser("Header")
   def parse(ctx, lines):
-    logger.info("parsing Header in " + str(ctx) + " at " + (lines[0] if lines else "[]"))
     if lines:
       line = lines[0].strip()
       if line.endswith(":"):
@@ -194,9 +202,8 @@ class Grade(Part):
     self.explanation = explanation
   def __str__(self):
     return str(self.grade) + ": " + str(self.explanation)
-  @staticmethod
+  @parser("Grade")
   def parse(ctx, lines):
-    logger.info("parsing Grade in " + str(ctx) + " at " + (lines[0] if lines else "[]"))
     if lines:
       line = lines[0].strip()
       assert line.startswith("-") or line.startswith("+")
