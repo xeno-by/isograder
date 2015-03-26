@@ -81,7 +81,7 @@ class Sheet(object):
   def __init__(self, parts):
     self.parts = parts
   def __str__(self):
-    return "\n".join(map(lambda part: str(part), parts))
+    return "\n".join(map(lambda part: str(part), self.parts))
   @parser("Sheet")
   def parse(ctx, lines):
     assert ctx.level == 0
@@ -208,7 +208,7 @@ class Grade(Part):
     if lines:
       line = lines[0].strip()
       assert line.startswith("-") or line.startswith("+")
-      m = re.match("^([-|+]\d+)\w*:\w*(.*?)$")
+      m = re.match("^([-|+]\d+)\w*:\w*(.*?)$", line)
       if m:
         grade = int(m.groups()[0])
         explanation = m.groups()[1]
