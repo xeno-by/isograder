@@ -15,13 +15,17 @@ def message_unexpected_eof(what):
 def message_only_blanks_and_sections_at_top_level():
   return "at the top-level of a correction sheet, only blank lines and section lines are allowed"
 def message_no_sections_at_top_level():
-  return "at the top-level of a correction sheet, exactly one section is require"
+  return "exactly one section is allowed at the top level of a correction sheet"
 def message_multiple_sections_at_top_level():
-  return "at the top-level of a correction sheet, exactly one section is require"
-def message_invalid_context_level(level, actual):
-  return "invalid context level: expected " + level + ", actual " + ("*" * actual)
-def message_invalid_context_header(level, actual):
-  return "invalid context header: expected " + ("*" * level) + " <name> [/<max_grade>], actual " + actual
+  return "exactly one section is allowed at the top level of a correction sheet"
+def message_invalid_section_level(level, actual):
+  return "invalid section level: expected " + level + ", actual " + ("*" * actual)
+def message_invalid_section_header(level, actual):
+  return "invalid section header: expected " + ("*" * level) + " <name> [/<max_grade>], actual " + actual
+def message_invalid_line():
+  return "invalid line: should either start with */-/+ or end with -"
+def message_invalid_grade_header(actual):
+  return "invalid grade header: expected [-|+]<number>: <explanation>, actual " + actual
 
 logFormatter = logging.Formatter("%(asctime)-15s [%(levelname)s] %(message)s")
 rootLogger = logging.getLogger()
@@ -57,14 +61,21 @@ logger.info("Isograder starting up...")
 class Context(object):
   def __init__(self, level):
     self.level = level
+  def __str__(self):
+    return "{ level = " + str(self.level) + "}"
 class Error(object):
   def __init__(self, message):
     self.message = message
+  def __str__(self):
+    return "Error(" + str(self.message) + ")"
 class Sheet(object):
   def __init__(self, parts):
     self.parts = parts
+  def __str__(self):
+    return "\n".join(map(lambda part: str(part), parts))
   @staticmethod
   def parse(ctx, lines):
+    logger.info("parsing Sheet in " + str(ctx) + " at " + (lines[0] if lines else "[]"))
     assert ctx.level == 0
     parts = []
     while True:
@@ -79,7 +90,7 @@ class Sheet(object):
           move_on()
         elif isinstance(result, Section):
           if len(filter(lambda part: isinstance(part, Section), parts)) != 0:
-            return (Error(message_only_one_section_at_top_level()), lines)
+            return (Error(message_multiple_sections_at_top_level()), lines)
           else:
             move_on()
         else:
@@ -91,9 +102,10 @@ class Sheet(object):
 class Part(object):
   @staticmethod
   def parse(ctx, lines):
+    logger.info("parsing Part in " + str(ctx) + " at " + (lines[0] if lines else "[]"))
     if lines:
-      line = lines[0]
-      if line.strip() == "": return Blank.parse(ctx, lines)
+      line = lines[0].strip()
+      if line == "": return Blank.parse(ctx, lines)
       elif line.startswith("*"): return Section.parse(ctx, lines)
       elif line.startswith("-") or line.startswith("+"): return Grade.parse(ctx, lines)
       else: return Header.parse(ctx, lines)
@@ -102,11 +114,14 @@ class Part(object):
 class Blank(Part):
   def __init__(self, str):
     self.str = str
+  def __str__(self):
+    return str(self.str)
   @staticmethod
   def parse(ctx, lines):
+    logger.info("parsing Blank in " + str(ctx) + " at " + (lines[0] if lines else "[]"))
     if lines:
-      line = lines[0]
-      assert line.strip() == ""
+      line = lines[0].strip()
+      assert line == ""
       return (Blank(line), lines[1:])
     else:
       return (Error(message_unexpected_eof("Blank")), lines)
@@ -117,17 +132,20 @@ class Section(Part):
     self.grade = None
     self.max_grade = max_grade
     self.parts = parts
+  def __str__(self):
+    return "*" * self.level +  " " + str(self.name) + " [/" + str(self.max_grade) + "]"
   @staticmethod
   def parse(ctx, lines):
+    logger.info("parsing Section in " + str(ctx) + " at " + (lines[0] if lines else "[]"))
     if lines:
-      line = lines[0]
+      line = lines[0].strip()
       assert line.startswith("*")
       expected_level = ctx.level + 1
-      actual_level = len(re.match("^(\*).*$", line).groups()[0])
+      actual_level = len(re.match("^(\*+).*$", line).groups()[0])
       if expected_level == actual_level:
         level = actual_level
-        rest = line[len(level):]
-        m = re.match("^\w*(.*?)\w*\[/(d+)\]$", rest)
+        rest = line[level:]
+        m = re.match("^\w*(.*?)\w*\[/(\d+)\]$", rest)
         if m:
           name = m.groups()[0]
           max_grade = int(m.groups()[1])
@@ -149,28 +167,46 @@ class Section(Part):
               break
           return (Section(level, name, max_grade, parts), lines)
         else:
-          return (Error(message_invalid_context_header(level, line)), lines)
+          return (Error(message_invalid_section_header(level, line)), lines)
       else:
-        return (Error(message_invalid_context_level("*" * expected_level, actual_level)), lines)
+        return (Error(message_invalid_section_level("*" * expected_level, actual_level)), lines)
     else:
       return (Error(message_unexpected_eof("Section")), lines)
 class Header(Part):
   def __init__(self, str):
     self.str = str
+  def __str__(self):
+    return str(self.str)
   @staticmethod
   def parse(ctx, lines):
+    logger.info("parsing Header in " + str(ctx) + " at " + (lines[0] if lines else "[]"))
     if lines:
-      return (Error("Header.parse is not implemented yet"), lines)
+      line = lines[0].strip()
+      if line.endswith(":"):
+        return (Header(line[:-1]), lines[1:])
+      else:
+        return (Error(message_invalid_line()), lines)
     else:
       return (Error(message_unexpected_eof("Header")), lines)
 class Grade(Part):
   def __init__(self, grade, explanation):
     self.grade = grade
     self.explanation = explanation
+  def __str__(self):
+    return str(self.grade) + ": " + str(self.explanation)
   @staticmethod
   def parse(ctx, lines):
+    logger.info("parsing Grade in " + str(ctx) + " at " + (lines[0] if lines else "[]"))
     if lines:
-      return (Error("Grade.parse is not implemented yet"), lines)
+      line = lines[0].strip()
+      assert line.startswith("-") or line.startswith("+")
+      m = re.match("^([-|+]\d+)\w*:\w*(.*?)$")
+      if m:
+        grade = int(m.groups()[0])
+        explanation = m.groups()[1]
+        return (Grade(grade, explanation), lines[1:])
+      else:
+        return (Error(message_invalid_grade_header()), lines)
     else:
       return (Error(message_unexpected_eof("Grade")), lines)
 
