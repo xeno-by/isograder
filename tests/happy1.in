@@ -1,0 +1,24 @@
+* Etape 1 [/20]
+
+** Classe Point [/2]
+
+Modificateurs :
+-1: la classe n'est pas finale
+
+** Classe Vector [/3]
+
+** Classe Circle [/3]
+
+Méthode area :
+-2: la formule du calcul de l'aire est incorrecte
+
+** Classe Polygon [/12]
+
+*** Constructeur [/2]
+-1: la validité de la liste "points" n'est pas vérifiée
+-2: la liste "points" reçue n'est pas copiée
+
+*** Méthode area [/5]
+-1: le signe de l'aire est incorrect
+
+*** Méthode containsPoint [/5]
