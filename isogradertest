@@ -1,0 +1,50 @@
+#!/usr/bin/env python
+# coding=utf-8
+import os, sys, inspect, difflib
+from subprocess import Popen, PIPE, STDOUT
+
+def fail_bad_command_line(reason): print reason; print "usage: " + sys.argv[0]; exit(1)
+flags = filter(lambda arg: arg.startswith("-"), sys.argv[1:])
+other = filter(lambda arg: not arg.startswith("-"), sys.argv[1:])
+for flag in flags: fail_bad_command_line("unrecognized flag: " + flag)
+for other in other: fail_bad_command_line("unrecognized argument: " + other)
+
+def fail_does_not_exist(what): print what + " does not exist"; exit(1)
+project_dir = os.path.dirname(os.path.realpath(inspect.getfile(inspect.currentframe())))
+isograder_script = os.path.join(project_dir, "isograder")
+if not os.path.exists(isograder_script): fail_does_not_exist(isograder_script)
+test_dir = os.path.join(project_dir, "tests")
+if not os.path.exists(test_dir): fail_does_not_exist(test_dir)
+
+for input_name in os.listdir(test_dir):
+  if input_name.endswith(".in"):
+    input_path = os.path.join(test_dir, input_name)
+    sys.stdout.write("* " + input_path + " ")
+
+    with open(input_path, "r") as input_file: input_string = input_file.read()
+    isograder_process = Popen([isograder_script], stdin=PIPE, stdout=PIPE, stderr=PIPE)
+    (stdout, stderr) = isograder_process.communicate(input = input_string)
+    code = isograder_process.returncode
+
+    log_path = input_path[:-len(".in")] + ".log"
+    with open(log_path, "w") as log_file:
+      log_file.write("EXIT CODE:\n")
+      log_file.write(str(code) + "\n")
+      log_file.write("\n")
+      log_file.write("STDOUT:\n")
+      log_file.write(stdout)
+      log_file.write("\n")
+      log_file.write("STDERR:\n")
+      log_file.write(stderr)
+      log_file.write("\n")
+
+    output_path = input_path[:-len(".in")] + ".out"
+    if not os.path.exists(output_path): open(output_path, "w").close()
+    with open(output_path, "r") as output_file, open(log_path, "r") as log_file:
+      diff = list(difflib.ndiff(log_file.readlines(), output_file.readlines()))
+      if len(diff) == 0:
+        print "[ OK ]"
+      else:
+        print "[FAIL]"
+        for line in diff: sys.stdout.write(line)
+
