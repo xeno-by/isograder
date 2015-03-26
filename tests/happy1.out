@@ -1,0 +1,31 @@
+EXIT CODE:
+0
+
+STDOUT:
+* Etape 1 [14/20]
+
+** Classe Point [1/2]
+
+Modificateurs 
+-1: la classe n'est pas finale
+
+** Classe Vector [3/3]
+
+** Classe Circle [1/3]
+
+Méthode area 
+-2: la formule du calcul de l'aire est incorrecte
+
+** Classe Polygon [9/12]
+
+*** Constructeur [0/2]
+-1: la validité de la liste "points" n'est pas vérifiée
+-2: la liste "points" reçue n'est pas copiée
+
+*** Méthode area [4/5]
+-1: le signe de l'aire est incorrect
+
+*** Méthode containsPoint [5/5]
+
+STDERR:
+

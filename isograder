@@ -112,8 +112,8 @@ class Sheet(object):
     self.parts = parts
   def __str__(self):
     return "\n".join(map(lambda part: str(part), self.parts))
-  def compute(self):
-    return Sheet(self.ctx, map(lambda part: part.compute(), self.parts))
+  def fill(self):
+    return Sheet(self.ctx, map(lambda part: part.fill(), self.parts))
   @parser("Sheet")
   def parse(ctx):
     assert ctx.position == 1 and ctx.level == 0
@@ -162,7 +162,7 @@ class Blank(Part):
     self.str = str
   def __str__(self):
     return str(self.str)
-  def compute(self):
+  def fill(self):
     return self
   @parser("Blank")
   def parse(ctx):
@@ -181,12 +181,25 @@ class Section(Part):
     self.max_grade = max_grade
     self.parts = parts
   def __str__(self):
-    header = "*" * self.level +  " " + str(self.name) + " [/" + str(self.max_grade) + "]"
+    header = "*" * self.level +  " " + str(self.name) + " [" + (str(self.grade) if self.grade is not None else "") + "/" + str(self.max_grade) + "]"
     body = "\n" + "\n".join(map(lambda part: str(part), self.parts)) if self.parts else ""
     return header + body
-  def compute(self):
-    grade = None # TODO: to be implemented
-    return Section(self.ctx, self.level, self.name, grade, self.max_grade, map(lambda part: part.compute(), self.parts))
+  def fill(self):
+    filled_parts = map(lambda part: part.fill(), self.parts)
+    filled_subsections = filter(lambda filled_part: isinstance(filled_part, Section), filled_parts)
+    if filled_subsections:
+      accumulated_grade = 0
+      for filled_subsection in filled_subsections: accumulated_grade += filled_subsection.grade
+      grade = accumulated_grade
+      assert 0 <= grade and grade <= self.max_grade
+    else:
+      filled_corrections = filter(lambda filled_part: isinstance(filled_part, Correction), filled_parts)
+      accumulated_penalty = 0
+      for filled_correction in filled_corrections: accumulated_penalty += filled_correction.penalty
+      grade = self.max_grade - accumulated_penalty
+      if grade < 0: grade = 0
+      if grade > self.max_grade: grade = self.max_grade
+    return Section(self.ctx, self.level, self.name, grade, self.max_grade, filled_parts)
   @parser("Section")
   def parse(ctx):
     initial_ctx = ctx
@@ -248,7 +261,7 @@ class Header(Part):
     self.str = str
   def __str__(self):
     return str(self.str)
-  def compute(self):
+  def fill(self):
     return self
   @parser("Header")
   def parse(ctx):
@@ -259,13 +272,13 @@ class Header(Part):
     else:
       return Error(ctx, message_unexpected_eof("Header"))
 class Correction(Part):
-  def __init__(self, ctx, grade, explanation):
+  def __init__(self, ctx, penalty, explanation):
     self.ctx = ctx
-    self.grade = grade
+    self.penalty = penalty
     self.explanation = explanation
   def __str__(self):
-    return str(self.grade) + ": " + str(self.explanation)
-  def compute(self):
+    return str(-1 * self.penalty) + ": " + str(self.explanation)
+  def fill(self):
     return self
   @parser("Correction")
   def parse(ctx):
@@ -275,8 +288,9 @@ class Correction(Part):
       m = re.match("^([-|+]\d+)\w*:\w*(.*?)$", line)
       if m:
         grade = int(m.groups()[0])
+        penalty = -1 * grade
         explanation = m.groups()[1].strip()
-        return Success(ctx.next_line(), Correction(ctx, grade, explanation))
+        return Success(ctx.next_line(), Correction(ctx, penalty, explanation))
       else:
         return Error(ctx, message_invalid_correction_header())
     else:
@@ -289,7 +303,7 @@ result = Sheet.parse(initial_ctx)
 if type(result) == Success:
   input_sheet = result.tree
   assert len(result.ctx.lines) == 0
-  output_sheet = input_sheet.compute()
+  output_sheet = input_sheet.fill()
   print str(output_sheet)
   logger.info("Isograder terminating with a success...")
   sys.exit(0)
