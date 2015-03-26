@@ -162,7 +162,8 @@ class Section(Part):
           while True:
             if lines:
               line = lines[0]
-              if line.startswith("*"):
+              # need to allow `* Section\n** Subsection`, but stop at `* Section 1\n* Section 2`
+              if line.startswith("*") and not line.startswith("*" * (ctx.level + 2)):
                 break
               else:
                 result, remaining_lines = Part.parse(Context(ctx.level + 1), lines)
