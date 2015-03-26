@@ -44,7 +44,7 @@ if sys.version_info < (2, 7) or (2, 8) <= sys.version_info: fail_bad_python_vers
 
 def custom_except_hook(exctype, value, tb):
   logger.critical(message_unexpected_failure("\n".join(traceback.format_exception(exctype, value, tb))))
-  logger.info("Isograder shutting down...")
+  logger.info("Isograder terminating with an unexpected error...")
   exit(1)
 sys.excepthook = custom_except_hook
 
@@ -62,7 +62,7 @@ class Context(object):
   def __init__(self, level):
     self.level = level
   def __str__(self):
-    return "{ level = " + str(self.level) + "}"
+    return "{ level = " + str(self.level) + " }"
 class Error(object):
   def __init__(self, message):
     self.message = message
@@ -220,6 +220,7 @@ elif type(result) == Error:
   line_number = len(input_lines) - len(remaining_lines) + 1
   line = remaining_lines[0] if remaining_lines else ""
   logger.critical(message_bad_parse(result.message, line_number, line))
+  logger.info("Isograder terminating with a parse error...")
   exit(1)
 
-logger.info("Isograder shutting down...")
+logger.info("Isograder terminating with a success...")
