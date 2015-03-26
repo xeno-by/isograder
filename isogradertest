@@ -42,7 +42,7 @@ for input_name in os.listdir(test_dir):
     if not os.path.exists(output_path): open(output_path, "w").close()
     with open(output_path, "r") as output_file, open(log_path, "r") as log_file:
       diff = list(difflib.ndiff(log_file.readlines(), output_file.readlines()))
-      if len(diff) == 0:
+      if not filter(lambda diffline: diffline.startswith("+") or diffline.startswith("-"), diff):
         print "[ OK ]"
       else:
         print "[FAIL]"
