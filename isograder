@@ -23,6 +23,8 @@ def message_invalid_section_level(level, actual):
   return "invalid section level: expected " + level + ", actual " + ("*" * actual)
 def message_invalid_section_header(level, actual):
   return "invalid section header: expected " + ("*" * level) + " <name> [/<max_grade>], actual " + actual
+def message_invalid_section_grade(expected, actual):
+  return "invalid section grade: expected (i.e. specified) " + str(expected) + ", actual (i.e. sum of all subsection grades) " + str(actual)
 def message_invalid_line():
   return "invalid line: should either start with */-/+ or end with -"
 def message_invalid_correction_location():
@@ -228,6 +230,11 @@ class Section(Part):
                   assert False, "unexpected parse result of type " + str(type(result))
             else:
               break
+          subsections = filter(lambda part: isinstance(part, Section), parts)
+          if subsections:
+            accumulated_max_grade = 0
+            for subsection in subsections: accumulated_max_grade += subsection.max_grade
+            if (max_grade != accumulated_max_grade): return Error(initial_ctx, message_invalid_section_grade(max_grade, accumulated_max_grade))
           return Success(ctx, Section(initial_ctx, level, name, None, max_grade, parts))
         else:
           return Error(ctx, message_invalid_section_header(level, line))
@@ -282,9 +289,11 @@ result = Sheet.parse(initial_ctx)
 if type(result) == Success:
   input_sheet = result.tree
   assert len(result.ctx.lines) == 0
+  output_sheet = input_sheet.compute()
+  print str(output_sheet)
+  logger.info("Isograder terminating with a success...")
+  sys.exit(0)
 elif type(result) == Error:
   logger.critical(message_bad_parse(result))
   logger.info("Isograder terminating with a parse error...")
   exit(1)
-
-logger.info("Isograder terminating with a success...")
