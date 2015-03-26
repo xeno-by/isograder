@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding=utf-8
-import os, sys, logging, inspect, traceback
+import os, sys, logging, inspect, traceback, re
 
 def message_unexpected_failure(explanation):
   return "unexpected failure in isograder:" + "\n" + str(explanation)
@@ -10,12 +10,18 @@ def message_bad_command_line(explanation):
   return str(explanation) + "\n" + "usage: " + sys.argv[0] + " [-v]"
 def message_bad_parse(explanation, line_number, line):
   return "error parsing the correction sheet:" + "\n" + "line " + str(line_number) + ": " + explanation + "\n" + line + "\n" + "^"
+def message_unexpected_eof(what):
+  return "unexpected end of file when parsing " + what
 def message_only_blanks_and_sections_at_top_level():
   return "at the top-level of a correction sheet, only blank lines and section lines are allowed"
 def message_no_sections_at_top_level():
   return "at the top-level of a correction sheet, exactly one section is require"
 def message_multiple_sections_at_top_level():
   return "at the top-level of a correction sheet, exactly one section is require"
+def message_invalid_context_level(level, actual):
+  return "invalid context level: expected " + level + ", actual " + ("*" * actual)
+def message_invalid_context_header(level, actual):
+  return "invalid context header: expected " + ("*" * level) + " <name> [/<max_grade>], actual " + actual
 
 logFormatter = logging.Formatter("%(asctime)-15s [%(levelname)s] %(message)s")
 rootLogger = logging.getLogger()
@@ -48,6 +54,9 @@ if verbose: rootLogger.setLevel(logging.INFO)
 logger.info("Isograder starting up...")
 
 # this is an amazing level of verbosity in comparison with Scala
+class Context(object):
+  def __init__(self, level):
+    self.level = level
 class Error(object):
   def __init__(self, message):
     self.message = message
@@ -55,11 +64,12 @@ class Sheet(object):
   def __init__(self, parts):
     self.parts = parts
   @staticmethod
-  def parse(lines):
+  def parse(ctx, lines):
+    assert ctx.level == 0
     parts = []
     while True:
       if lines:
-        result, remaining_lines = Part.parse(lines)
+        result, remaining_lines = Part.parse(ctx, lines)
         def move_on():
           parts.append(result)
           lines = remaining_lines
@@ -80,37 +90,93 @@ class Sheet(object):
     else: return (Error(message_no_sections_at_top_level()), lines)
 class Part(object):
   @staticmethod
-  def parse(lines):
-    return (Error("Part.parse is not implemented yet"), lines)
-class Section(Part):
-  def __init__(self, parts):
-    self.parts = parts
-  @staticmethod
-  def parse(lines):
-    return (Error("Section.parse is not implemented yet"), lines)
+  def parse(ctx, lines):
+    if lines:
+      line = lines[0]
+      if line.strip() == "": return Blank.parse(ctx, lines)
+      elif line.startswith("*"): return Section.parse(ctx, lines)
+      elif line.startswith("-") or line.startswith("+"): return Grade.parse(ctx, lines)
+      else: return Header.parse(ctx, lines)
+    else:
+      return (Error(message_unexpected_eof("Part")), lines)
 class Blank(Part):
   def __init__(self, str):
     self.str = str
   @staticmethod
-  def parse(lines):
-    return (Error("Blank.parse is not implemented yet"), lines)
+  def parse(ctx, lines):
+    if lines:
+      line = lines[0]
+      assert line.strip() == ""
+      return (Blank(line), lines[1:])
+    else:
+      return (Error(message_unexpected_eof("Blank")), lines)
+class Section(Part):
+  def __init__(self, level, name, max_grade, parts):
+    self.level = level
+    self.name = name
+    self.grade = None
+    self.max_grade = max_grade
+    self.parts = parts
+  @staticmethod
+  def parse(ctx, lines):
+    if lines:
+      line = lines[0]
+      assert line.startswith("*")
+      expected_level = ctx.level + 1
+      actual_level = len(re.match("^(\*).*$", line).groups()[0])
+      if expected_level == actual_level:
+        level = actual_level
+        rest = line[len(level):]
+        m = re.match("^\w*(.*?)\w*\[/(d+)\]$", rest)
+        if m:
+          name = m.groups()[0]
+          max_grade = int(m.groups()[1])
+          lines = lines[1:]
+          parts = []
+          while True:
+            if lines:
+              line = lines[0]
+              if line.startswith("*"):
+                break
+              else:
+                result, remaining_lines = Part.parse(Context(ctx.level + 1), lines[1:])
+                if isinstance(result, Error):
+                  return (result, remaining_lines)
+                else:
+                  parts.append(result)
+                  lines = remaining_lines
+            else:
+              break
+          return (Section(level, name, max_grade, parts), lines)
+        else:
+          return (Error(message_invalid_context_header(level, line)), lines)
+      else:
+        return (Error(message_invalid_context_level("*" * expected_level, actual_level)), lines)
+    else:
+      return (Error(message_unexpected_eof("Section")), lines)
 class Header(Part):
   def __init__(self, str):
     self.str = str
   @staticmethod
-  def parse(lines):
-    return (Error("Header.parse is not implemented yet"), lines)
+  def parse(ctx, lines):
+    if lines:
+      return (Error("Header.parse is not implemented yet"), lines)
+    else:
+      return (Error(message_unexpected_eof("Header")), lines)
 class Grade(Part):
   def __init__(self, grade, explanation):
     self.grade = grade
     self.explanation = explanation
   @staticmethod
-  def parse(lines):
-    return (Error("Grade.parse is not implemented yet"), lines)
+  def parse(ctx, lines):
+    if lines:
+      return (Error("Grade.parse is not implemented yet"), lines)
+    else:
+      return (Error(message_unexpected_eof("Grade")), lines)
 
 input_string = sys.stdin.read()
 input_lines = input_string.strip().split("\n")
-result, remaining_lines = Sheet.parse(input_lines)
+result, remaining_lines = Sheet.parse(Context(0), input_lines)
 if type(result) == Sheet:
   input_sheet = result
   assert len(remaining_lines) == 0
