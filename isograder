@@ -73,6 +73,8 @@ class Context(object):
     return "{ position = " + str(self.position) + ", level = " + str(self.level) + " }"
   def next_line(self):
     return Context(self.initial_lines, self.lines[1:], self.position + 1, self.level)
+  def prev_level(self):
+    return Context(self.initial_lines, self.lines, self.position, self.level - 1)
   def next_level(self):
     return Context(self.initial_lines, self.lines, self.position, self.level + 1)
 class Success(object):
@@ -139,7 +141,7 @@ class Sheet(object):
           assert False, "unexpected parse result of type " + str(type(result))
       else:
         break
-    if len(filter(lambda part: isinstance(part, Section), parts)) != 0: return Success(initial_ctx, Sheet(pos, parts))
+    if len(filter(lambda part: isinstance(part, Section), parts)) != 0: return Success(ctx, Sheet(initial_ctx, parts))
     else: return Error(ctx, message_no_sections_at_top_level())
 class Part(object):
   @parser("Part")
@@ -220,7 +222,7 @@ class Section(Part):
                     return Error(culprit.ctx, message_invalid_correction_location())
                   else:
                     parts.append(part)
-                    ctx = result.ctx
+                    ctx = result.ctx.prev_level()
                     continue
                 else:
                   assert False, "unexpected parse result of type " + str(type(result))
@@ -266,7 +268,7 @@ class Correction(Part):
       m = re.match("^([-|+]\d+)\w*:\w*(.*?)$", line)
       if m:
         grade = int(m.groups()[0])
-        explanation = m.groups()[1]
+        explanation = m.groups()[1].strip()
         return Success(ctx.next_line(), Correction(ctx, grade, explanation))
       else:
         return Error(ctx, message_invalid_correction_header())
