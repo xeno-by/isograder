@@ -16,8 +16,11 @@ if not os.path.exists(isograder_script): fail_does_not_exist(isograder_script)
 test_dir = os.path.join(project_dir, "tests")
 if not os.path.exists(test_dir): fail_does_not_exist(test_dir)
 
+total = 0
+failed = 0
 for input_name in os.listdir(test_dir):
   if input_name.endswith(".in"):
+    total += 1
     input_path = os.path.join(test_dir, input_name)
     sys.stdout.write("* " + input_path + " ")
 
@@ -45,6 +48,9 @@ for input_name in os.listdir(test_dir):
       if not filter(lambda diffline: diffline.startswith("+") or diffline.startswith("-"), diff):
         print "[ OK ]"
       else:
+        failed += 1
         print "[FAIL]"
         for line in diff: sys.stdout.write(line)
 
+if failed != 0:
+  print str(failed) + " of " + str(total) + " tests failed"
