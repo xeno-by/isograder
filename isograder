@@ -8,7 +8,7 @@ def message_bad_python_version(actual):
   return "need python 2.7, you have " + str(actual)
 def message_bad_command_line(explanation):
   return str(explanation) + "\n" + "usage: " + sys.argv[0] + " [-v]"
-def message_bad_parse(error):
+def message_expected_error(error):
   is_useful_position = error.ctx.position - 1 < len(error.ctx.initial_lines)
   if is_useful_position: return "error parsing the correction sheet:" + "\n" + str(error) + "\n" + str(error.ctx.initial_lines[error.ctx.position - 1]) + "\n" + "^"
   else: return "error parsing the correction sheet:" + "\n" + str(error.msg)
@@ -25,7 +25,9 @@ def message_invalid_section_level(level, actual):
 def message_invalid_section_header(level, actual):
   return "invalid section header format: expected \"" + ("*" * level) + " <name> [/<max_grade>]\""
 def message_invalid_section_grade(expected, actual):
-  return "invalid section grade: expected (i.e. specified) " + str(expected) + ", actual (i.e. sum of all subsection grades) " + str(actual)
+  return "invalid section grade: expected (i.e. specified) " + str(expected) + ", actual (i.e. computed) " + str(actual)
+def message_invalid_section_max_grade(expected, actual):
+  return "invalid section max grade: expected (i.e. specified) " + str(expected) + ", actual (i.e. sum of all subsection max grades) " + str(actual)
 def message_invalid_line():
   first_line = "invalid line: should either start with * (section) or start with -/+ (correction) or end with - (header)"
   second_line = "NOTE: by the way, multi-line explanations for corrections are not supported"
@@ -203,6 +205,11 @@ class Section(Part):
       grade = self.max_grade - accumulated_penalty
       if grade < 0: grade = 0
       if grade > self.max_grade: grade = self.max_grade
+    if self.grade is not None and self.grade != grade:
+      error = Error(self.ctx, message_invalid_section_grade(self.grade, grade))
+      logger.critical(message_expected_error(error))
+      logger.info("Isograder terminating with a grade error...")
+      sys.exit(1)
     return Section(self.ctx, self.level, self.name, grade, self.max_grade, filled_parts)
   @parser("Section")
   def parse(ctx):
@@ -215,10 +222,13 @@ class Section(Part):
       if expected_level == actual_level:
         level = actual_level
         rest = line[level:]
-        m = re.match("^\w*(.*?)\w*\[/(\d+)\]$", rest)
+        m = re.match("^(.*)\[(\d+)?/(\d+)\]$", rest)
+        logger.info("matching " + line)
+        logger.info("match result: " + str(m.groups() if m else None))
         if m:
           name = m.groups()[0].strip()
-          max_grade = int(m.groups()[1])
+          grade = int(m.groups()[1]) if m.groups()[1] is not None else None
+          max_grade = int(m.groups()[2])
           ctx = ctx.next_line()
           parts = []
           while True:
@@ -251,8 +261,8 @@ class Section(Part):
           if subsections:
             accumulated_max_grade = 0
             for subsection in subsections: accumulated_max_grade += subsection.max_grade
-            if (max_grade != accumulated_max_grade): return Error(initial_ctx, message_invalid_section_grade(max_grade, accumulated_max_grade))
-          return Success(ctx, Section(initial_ctx, level, name, None, max_grade, parts))
+            if (max_grade != accumulated_max_grade): return Error(initial_ctx, message_invalid_section_max_grade(max_grade, accumulated_max_grade))
+          return Success(ctx, Section(initial_ctx, level, name, grade, max_grade, parts))
         else:
           return Error(ctx, message_invalid_section_header(level, line))
       else:
@@ -292,6 +302,8 @@ class Correction(Leaf):
       line = ctx.lines[0].strip()
       assert line.startswith("-") or line.startswith("+")
       m = re.match("^([-|+]\d+)\w*:\w*(.*?)$", line)
+      logger.info("matching " + line)
+      logger.info("match result: " + str(m.groups() if m else None))
       if m:
         grade = int(m.groups()[0])
         penalty = -1 * grade
@@ -314,6 +326,6 @@ if type(result) == Success:
   logger.info("Isograder terminating with a success...")
   sys.exit(0)
 elif type(result) == Error:
-  logger.critical(message_bad_parse(result))
+  logger.critical(message_expected_error(result))
   logger.info("Isograder terminating with a parse error...")
   exit(1)

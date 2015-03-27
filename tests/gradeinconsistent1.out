@@ -5,7 +5,7 @@ STDOUT:
 
 STDERR:
 error parsing the correction sheet:
-line 1: invalid section grade: expected (i.e. specified) 20, actual (i.e. sum of all subsection grades) 5
+line 1: invalid section max grade: expected (i.e. specified) 20, actual (i.e. sum of all subsection max grades) 5
 * Etape 1 [/20]
 ^
 

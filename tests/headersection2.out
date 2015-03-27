@@ -5,7 +5,7 @@ STDOUT:
 
 STDERR:
 error parsing the correction sheet:
-line 1: invalid section header format: expected "* <name> [/<max_grade>]"
+line 1: invalid section grade: expected (i.e. specified) 0, actual (i.e. computed) 2
 * Section [0/2]
 ^
 
