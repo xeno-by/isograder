@@ -43,7 +43,7 @@ and explicitly route the output from stdout, e.g. `cat input.file | isograder > 
 Here's a small program in Java that showcases integration with isograder.
 That's one of my first times writing code in Java, so it might be horribly non-idiomatic, but it gets the job done:
 
-```
+```java
 import java.io.*;
 
 class Test {
