@@ -1,6 +1,6 @@
 ## Isograder
 
-A script that can validate and fill in correction sheets for the CS-108 course.
+A script that can validate and fill in correction sheets for the CS-108 course at EPFL.
 
 ### Usage
 
