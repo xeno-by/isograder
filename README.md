@@ -74,3 +74,7 @@ class Test {
   }
 }
 ```
+
+### Support
+
+If you encounter any problems with the script - execution failures, exceptions, seemingly spurious errors - do the following: 1) report an issue on [the github issue tracker](https://github.com/xeno-by/isograder/issues/new) (please avoid including students' personal data and try to provide as many details as possible), 2) if it's urgent, email me at [xeno.by@gmail.com](mailto:xeno.by@gmail.com) - I only check github notifications several times a day, but I check email several dozen times a day.
