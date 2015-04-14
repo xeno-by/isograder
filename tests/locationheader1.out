@@ -1,11 +1,10 @@
 EXIT CODE:
-1
+0
 
 STDOUT:
+* Section [1/1]
+Mistake:
+** Subsection [1/1]
 
 STDERR:
-error parsing the correction sheet:
-line 2: headers are only allowed in sections that don't contain any other sections
-Mistake:
-^
 

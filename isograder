@@ -34,8 +34,6 @@ def message_invalid_line():
   return first_line + "\n" + second_line
 def message_invalid_correction(actual):
   return "invalid correction format: expected \"[-|+]<number>: <explanation>\""
-def message_invalid_header():
-  return "headers are only allowed in sections that don't contain any other sections"
 
 logFormatter = logging.Formatter("%(message)s")
 rootLogger = logging.getLogger()
@@ -245,17 +243,9 @@ class Section(Part):
                 if isinstance(result, Error):
                   return result
                 elif isinstance(result, Success):
-                  part = result.tree
-                  if isinstance(part, Header) and filter(lambda part: isinstance(part, Section), parts):
-                    culprit = part
-                    return Error(culprit.ctx, message_invalid_header())
-                  elif isinstance(part, Section) and filter(lambda part: isinstance(part, Header), parts):
-                    culprit = filter(lambda part: isinstance(part, Header), parts)[0]
-                    return Error(culprit.ctx, message_invalid_header())
-                  else:
-                    parts.append(part)
-                    ctx = result.ctx.prev_level()
-                    continue
+                  parts.append(result.tree)
+                  ctx = result.ctx.prev_level()
+                  continue
                 else:
                   assert False, "unexpected parse result of type " + str(type(result))
             else:
