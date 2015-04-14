@@ -34,8 +34,8 @@ def message_invalid_line():
   return first_line + "\n" + second_line
 def message_invalid_correction(actual):
   return "invalid correction format: expected \"[-|+]<number>: <explanation>\""
-def message_invalid_leaf():
-  return "headers and corrections are only allowed in sections that don't contain any other sections"
+def message_invalid_header():
+  return "headers are only allowed in sections that don't contain any other sections"
 
 logFormatter = logging.Formatter("%(message)s")
 rootLogger = logging.getLogger()
@@ -192,25 +192,28 @@ class Section(Part):
     return header + body
   def fill(self):
     filled_parts = map(lambda part: part.fill(), self.parts)
-    filled_subsections = filter(lambda filled_part: isinstance(filled_part, Section), filled_parts)
-    if filled_subsections:
-      accumulated_grade = 0
-      for filled_subsection in filled_subsections: accumulated_grade += filled_subsection.grade
-      grade = accumulated_grade
-      assert 0 <= grade and grade <= self.max_grade
-    else:
+    def accumulated_points():
+      filled_subsections = filter(lambda filled_part: isinstance(filled_part, Section), filled_parts)
+      accumulated_points = 0
+      for filled_subsection in filled_subsections: accumulated_points += filled_subsection.grade
+      if not filled_subsections: accumulated_points = self.max_grade
+      return accumulated_points
+    def accumulated_penalty():
       filled_corrections = filter(lambda filled_part: isinstance(filled_part, Correction), filled_parts)
       accumulated_penalty = 0
       for filled_correction in filled_corrections: accumulated_penalty += filled_correction.penalty
-      grade = self.max_grade - accumulated_penalty
+      return accumulated_penalty
+    def resulting_grade():
+      grade = accumulated_points() - accumulated_penalty()
       if grade < 0: grade = 0
       if grade > self.max_grade: grade = self.max_grade
-    if self.grade is not None and self.grade != grade:
-      error = Error(self.ctx, message_invalid_section_grade(self.grade, grade))
+      return grade
+    if self.grade is not None and self.grade != resulting_grade():
+      error = Error(self.ctx, message_invalid_section_grade(self.grade, resulting_grade()))
       logger.critical(message_expected_error(error))
       logger.info("Isograder terminating with a grade error...")
       sys.exit(1)
-    return Section(self.ctx, self.level, self.name, grade, self.max_grade, filled_parts)
+    return Section(self.ctx, self.level, self.name, resulting_grade(), self.max_grade, filled_parts)
   @parser("Section")
   def parse(ctx):
     initial_ctx = ctx
@@ -243,12 +246,12 @@ class Section(Part):
                   return result
                 elif isinstance(result, Success):
                   part = result.tree
-                  if isinstance(part, Leaf) and filter(lambda part: isinstance(part, Section), parts):
+                  if isinstance(part, Header) and filter(lambda part: isinstance(part, Section), parts):
                     culprit = part
-                    return Error(culprit.ctx, message_invalid_leaf())
-                  elif isinstance(part, Section) and filter(lambda part: isinstance(part, Leaf), parts):
-                    culprit = filter(lambda part: isinstance(part, Leaf), parts)[0]
-                    return Error(culprit.ctx, message_invalid_leaf())
+                    return Error(culprit.ctx, message_invalid_header())
+                  elif isinstance(part, Section) and filter(lambda part: isinstance(part, Header), parts):
+                    culprit = filter(lambda part: isinstance(part, Header), parts)[0]
+                    return Error(culprit.ctx, message_invalid_header())
                   else:
                     parts.append(part)
                     ctx = result.ctx.prev_level()
@@ -269,9 +272,7 @@ class Section(Part):
         return Error(ctx, message_invalid_section_level("*" * expected_level, actual_level))
     else:
       return Error(ctx, message_unexpected_eof("Section"))
-class Leaf(Part):
-  pass
-class Header(Leaf):
+class Header(Part):
   def __init__(self, ctx, str):
     self.ctx = ctx
     self.str = str
@@ -287,7 +288,7 @@ class Header(Leaf):
       else: return Error(ctx, message_invalid_line())
     else:
       return Error(ctx, message_unexpected_eof("Header"))
-class Correction(Leaf):
+class Correction(Part):
   def __init__(self, ctx, penalty, explanation):
     self.ctx = ctx
     self.penalty = penalty

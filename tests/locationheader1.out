@@ -5,7 +5,7 @@ STDOUT:
 
 STDERR:
 error parsing the correction sheet:
-line 2: headers and corrections are only allowed in sections that don't contain any other sections
+line 2: headers are only allowed in sections that don't contain any other sections
 Mistake:
 ^
 
