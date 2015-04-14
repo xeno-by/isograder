@@ -1,0 +1,19 @@
+EXIT CODE:
+0
+
+STDOUT:
+* Test [4/10]
+-1: foo
+** Sub1 [2/3]
+-1: foo
+** Sub2 [2/3]
+-1: foo
+** Sub3 [1/4]
+-1: foo
+*** Sub31 [1/2]
+-1: foo
+*** Sub32 [1/2]
+-1: foo
+
+STDERR:
+

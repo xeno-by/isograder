@@ -284,7 +284,9 @@ class Correction(Part):
     self.penalty = penalty
     self.explanation = explanation
   def __str__(self):
-    return str(-1 * self.penalty) + ": " + str(self.explanation)
+    s_sign = "+" if self.penalty <= 0 else "-"
+    s_penalty = s_sign + str(abs(self.penalty))
+    return s_penalty + ": " + str(self.explanation)
   def fill(self):
     return self
   @parser("Correction")
