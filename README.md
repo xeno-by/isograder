@@ -41,7 +41,7 @@ and explicitly route the output from stdout, e.g. `cat input.file | isograder > 
 To grade sheets in batch, use the following command (grades all sheets from `not_graded` and stores them into `graded`):
 
 ```
-find not_graded/ -type f -exec sh -c 'cat $0 | ./isograder > ./graded/$(basename $0)' {} \;
+find not_graded/ -type f -exec sh -c 'cat $0 | isograder > ./graded/$(basename $0)' {} \;
 ```
 
 #### Java
