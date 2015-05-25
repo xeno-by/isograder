@@ -38,6 +38,12 @@ that will log the facts that isograder observes and outline the actions that it 
 Since isograder reads from stdin and writes to stdout, you need to explicitly feed your input into stdin
 and explicitly route the output from stdout, e.g. `cat input.file | isograder > output.file`.
 
+To grade sheets in batch, use the following command (grades all sheets from `not_graded` and stores them into `graded`):
+
+```
+find not_graded/ -type f -exec sh -c 'cat $0 | isograder > ./graded/$(basename $0)' {} \;
+```
+
 #### Java
 
 Here's a small program in Java that showcases integration with isograder.
